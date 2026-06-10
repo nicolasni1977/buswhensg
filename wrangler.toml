@@ -1,0 +1,3 @@
+name = "buswhensg-live"
+pages_build_output_dir = "public"
+compatibility_date = "2026-01-01"
