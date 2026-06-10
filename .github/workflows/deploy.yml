@@ -20,6 +20,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Run unit tests (gates the deploy)
+        run: npm test
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v4
         with:

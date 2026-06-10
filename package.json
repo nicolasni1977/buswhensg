@@ -4,9 +4,12 @@
   "version": "0.1.0",
   "description": "Local live-data test harness for BusWhenSG (Cloudflare Pages dev + LTA DataMall proxy)",
   "scripts": {
-    "dev": "wrangler pages dev public --port 8788"
+    "dev": "wrangler pages dev public --port 8788",
+    "test": "vitest run",
+    "fetch-stops": "node scripts/fetch-busstops.mjs"
   },
   "devDependencies": {
+    "vitest": "^3",
     "wrangler": "^4"
   }
 }
