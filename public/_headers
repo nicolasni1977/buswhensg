@@ -1,0 +1,16 @@
+# Cloudflare Pages headers.
+# App code uses fixed filenames, so force browsers to revalidate on every load
+# (cheap conditional request via ETag) — guarantees a deploy reaches users
+# immediately instead of being masked by a stale cached scripts.js / styles.css.
+/index.html
+  Cache-Control: no-cache
+/scripts.js
+  Cache-Control: no-cache
+/lib.js
+  Cache-Control: no-cache
+/styles.css
+  Cache-Control: no-cache
+
+# The stop list is large and changes rarely — let it cache for a day.
+/stops.json
+  Cache-Control: public, max-age=86400
