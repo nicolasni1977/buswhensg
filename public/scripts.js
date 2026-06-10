@@ -35,6 +35,7 @@ const TRANSLATIONS = {
     search_label: 'Search by Stop Code or Name', search_placeholder: 'Enter 5-digit stop code or name…',
     search_btn: 'Search', near_me: 'Near Me', arrivals: 'Arrivals', updated_ago: 'Updated',
     select_stop_prompt: 'Tap a favourite, search a stop code, or use “Near Me”.',
+    locating: 'Finding your nearest bus stop…',
     loading: 'Fetching live arrivals…', no_data: 'No buses running for this stop right now.',
     not_found: 'Stop not found — try a 5-digit code.', arriving: 'Arriving',
     crowding: { low: 'Seats', med: 'Standing', high: 'Packed' },
@@ -44,6 +45,7 @@ const TRANSLATIONS = {
     search_label: '通过站点代码或名称搜索', search_placeholder: '输入5位站点代码或名称…',
     search_btn: '搜索', near_me: '在我附近', arrivals: '巴士到达', updated_ago: '更新于',
     select_stop_prompt: '点按收藏、搜索站点代码，或使用“在我附近”。',
+    locating: '正在查找最近的巴士站…',
     loading: '正在获取实时数据…', no_data: '该站点目前没有巴士。',
     not_found: '找不到站点 — 请输入5位代码。', arriving: '即将到达',
     crowding: { low: '有座位', med: '站立', high: '拥挤' },
@@ -53,6 +55,7 @@ const TRANSLATIONS = {
     search_label: 'Cari mengikut Kod atau Nama Hentian', search_placeholder: 'Masukkan kod 5-digit atau nama…',
     search_btn: 'Cari', near_me: 'Berdekatan Saya', arrivals: 'Ketibaan', updated_ago: 'Dikemaskini',
     select_stop_prompt: 'Tekan kegemaran, cari kod hentian, atau guna “Berdekatan Saya”.',
+    locating: 'Mencari hentian bas terdekat…',
     loading: 'Mengambil data masa nyata…', no_data: 'Tiada bas untuk hentian ini sekarang.',
     not_found: 'Hentian tidak dijumpai — cuba kod 5-digit.', arriving: 'Tiba',
     crowding: { low: 'Tempat duduk', med: 'Berdiri', high: 'Penuh' },
@@ -107,6 +110,7 @@ const App = {
     this.renderFavorites();
     this.updateLanguageUI();
     this.startTimers();
+    this.locate(true); // auto-find nearest stop on load (silent if blocked/denied)
   },
 
   async loadStops() {
@@ -174,7 +178,7 @@ const App = {
     document.getElementById('search-button').addEventListener('click', doSearch);
     document.getElementById('stop-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
 
-    document.getElementById('geo-button').addEventListener('click', () => this.handleGeolocation());
+    document.getElementById('geo-button').addEventListener('click', () => this.locate(false));
     document.getElementById('refresh-button').addEventListener('click', () => this.updateArrivalResults(AppState.selectedStopCode));
 
     document.getElementById('toggle-dark-light').addEventListener('click', () => {
@@ -263,14 +267,26 @@ const App = {
     this.renderFavorites();
   },
 
-  handleGeolocation() {
-    if (!navigator.geolocation) return alert('Geolocation not supported');
+  /** Find the nearest stop by GPS and load it. silent=true for the on-load auto-locate. */
+  locate(silent = false) {
+    if (!navigator.geolocation) { if (!silent) alert('Geolocation not supported'); return; }
+    const list = document.getElementById('arrival-list');
+    if (!AppState.selectedStopCode) {
+      list.innerHTML = `<div class="initial-placeholder">${TRANSLATIONS[AppState.currentLang].locating}</div>`;
+    }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const nearest = findNearest(pos.coords.latitude, pos.coords.longitude, STOPS);
-        if (nearest) this.updateArrivalResults(nearest.code);
+        if (nearest) this.updateArrivalResults(nearest.code); // also fills the search bar with the code
+        else if (!silent) alert('No nearby stop found.');
       },
-      () => alert('Unable to retrieve location.')
+      () => {
+        if (!silent) alert('Unable to retrieve location.');
+        else if (!AppState.selectedStopCode) {
+          list.innerHTML = `<div class="initial-placeholder">${TRANSLATIONS[AppState.currentLang].select_stop_prompt}</div>`;
+        }
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
     );
   },
 
@@ -282,7 +298,7 @@ const App = {
     document.getElementById('selected-stop').textContent = stop
       ? `${stop.name} · ${stop.road} · ${stop.code}`
       : `Stop ${stopCode}`;
-    document.getElementById('stop-search').value = '';
+    document.getElementById('stop-search').value = stopCode; // auto-fill the stop ID in the search bar
     Frecency.saveVisit(stopCode);
     this.renderFavorites();
     if (stop) this.focusMap(stop);
