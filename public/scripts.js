@@ -35,7 +35,12 @@ const AppState = {
   trackedService: null,
   routeLayer: null,
   busMarker: null,
+  busAnim: null,
 };
+
+const REDUCE_MOTION = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+const TRACK_INTERVAL_MS = 12000; // faster poll while tracking a bus
+const REFRESH_INTERVAL_MS = 25000;
 
 // Blue water-drop pin for the live bus; red dot for the selected stop (so they differ).
 const BUS_ICON = {
@@ -117,9 +122,11 @@ const Frecency = {
   top(limit = 5) { return frecencyTop(this.getAll(), Date.now(), limit); },
 };
 
-/** LIVE: call the same-origin Pages Function proxy (injects the LTA key, normalises). */
-const fetchArrivals = async (stopCode) => {
-  const res = await fetch(`/api/arrival?stop=${encodeURIComponent(stopCode)}`);
+/** LIVE: call the same-origin Pages Function proxy (injects the LTA key, normalises).
+ *  `fresh` adds a cache-buster so the faster tracking poll skips the browser/edge cache. */
+const fetchArrivals = async (stopCode, fresh = false) => {
+  const bust = fresh ? `&_t=${Date.now()}` : '';
+  const res = await fetch(`/api/arrival?stop=${encodeURIComponent(stopCode)}${bust}`);
   if (!res.ok) {
     let detail = '';
     try { detail = (await res.json()).error || ''; } catch {}
@@ -226,6 +233,7 @@ const App = {
 
     this.clearTracking();
     AppState.trackedService = service;
+    this.startRefreshTimer(); // poll faster while tracking
     AppState.routeLayer = L.layerGroup().addTo(AppState.map);
     const line = L.polyline(latlngs, { color: '#2563eb', weight: 5, opacity: 0.85 }).addTo(AppState.routeLayer);
     // keep the selected stop visible on the route
@@ -244,10 +252,29 @@ const App = {
   },
 
   placeBusMarker(bus, service, dest) {
-    if (AppState.busMarker) { AppState.busMarker.setLatLng([bus.lat, bus.lng]); return; }
-    AppState.busMarker = L.marker([bus.lat, bus.lng], { icon: L.divIcon(BUS_ICON), zIndexOffset: 1000 })
-      .addTo(AppState.routeLayer)
-      .bindPopup(`<b>Bus ${esc(service)}</b><br>${esc(dest)}`);
+    const target = [bus.lat, bus.lng];
+    if (!AppState.busMarker) { // first placement — no glide
+      AppState.busMarker = L.marker(target, { icon: L.divIcon(BUS_ICON), zIndexOffset: 1000 })
+        .addTo(AppState.routeLayer)
+        .bindPopup(`<b>Bus ${esc(service)}</b><br>${esc(dest)}`);
+      return;
+    }
+    const from = AppState.busMarker.getLatLng();
+    this.glideMarker(AppState.busMarker, [from.lat, from.lng], target);
+  },
+
+  /** Smoothly glide the pin from `from` to `to` across (just under) one poll interval. */
+  glideMarker(marker, from, to, duration = TRACK_INTERVAL_MS - 1000) {
+    if (AppState.busAnim) cancelAnimationFrame(AppState.busAnim);
+    if (REDUCE_MOTION || (from[0] === to[0] && from[1] === to[1])) { marker.setLatLng(to); return; }
+    const start = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      const e = 1 - Math.pow(1 - t, 2); // ease-out
+      marker.setLatLng([from[0] + (to[0] - from[0]) * e, from[1] + (to[1] - from[1]) * e]);
+      AppState.busAnim = t < 1 ? requestAnimationFrame(step) : null;
+    };
+    AppState.busAnim = requestAnimationFrame(step);
   },
 
   /** Move the tracked bus's pin to its latest GPS (called on each refresh). */
@@ -270,11 +297,13 @@ const App = {
   },
 
   clearTracking() {
+    if (AppState.busAnim) { cancelAnimationFrame(AppState.busAnim); AppState.busAnim = null; }
     if (AppState.routeLayer && AppState.map) AppState.map.removeLayer(AppState.routeLayer);
     AppState.routeLayer = null;
     AppState.busMarker = null;
     AppState.trackedService = null;
     this.setMapNotice(null);
+    this.startRefreshTimer(); // back to the normal (slower) cadence
   },
 
   setupEventListeners() {
@@ -448,7 +477,7 @@ const App = {
     const list = document.getElementById('arrival-list');
     if (!sameStop) list.innerHTML = `<div class="initial-placeholder">${TRANSLATIONS[AppState.currentLang].loading}</div>`;
     try {
-      const services = await fetchArrivals(stopCode);
+      const services = await fetchArrivals(stopCode, !!AppState.trackedService);
       AppState.lastServices = services;
       this.renderArrivals(services);
       if (AppState.trackedService) this.updateTrackedBus(); // move the pin on each refresh
@@ -517,9 +546,11 @@ const App = {
   },
 
   startRefreshTimer() {
+    if (AppState.refreshInterval) clearInterval(AppState.refreshInterval);
+    const ms = AppState.trackedService ? TRACK_INTERVAL_MS : REFRESH_INTERVAL_MS;
     AppState.refreshInterval = setInterval(() => {
       if (document.visibilityState === 'visible' && AppState.selectedStopCode) this.updateArrivalResults(AppState.selectedStopCode);
-    }, 25000);
+    }, ms);
   },
 };
 
