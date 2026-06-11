@@ -24,6 +24,9 @@ const AppState = {
   map: null,
   stopMarker: null,
   lastRenderedMins: {},
+  autoFollow: true,   // follow GPS to nearest stop until the user picks a stop manually
+  watchId: null,
+  userPos: null,
 };
 
 // Full Singapore bus-stop list, loaded at startup from stops.json (~5,200 stops).
@@ -110,7 +113,7 @@ const App = {
     this.renderFavorites();
     this.updateLanguageUI();
     this.startTimers();
-    this.locate(true); // auto-find nearest stop on load (silent if blocked/denied)
+    this.startTracking(); // continuously follow GPS to the nearest stop
   },
 
   async loadStops() {
@@ -133,7 +136,11 @@ const App = {
   },
 
   applyTheme() {
-    document.body.className = `theme-${AppState.isDarkMode ? 'dark' : 'light'} text-size-${AppState.textSize}`;
+    // Theme on <body>; text-size on <html> so it scales the rem root (the whole UI).
+    document.body.className = `theme-${AppState.isDarkMode ? 'dark' : 'light'}`;
+    document.documentElement.className = `text-size-${AppState.textSize}`;
+    const tsBtn = document.getElementById('toggle-text-size');
+    if (tsBtn) tsBtn.textContent = { default: 'A', large: 'A+', xlarge: 'A++' }[AppState.textSize];
   },
 
   initMapLazy() {
@@ -171,6 +178,7 @@ const App = {
       const val = document.getElementById('stop-search').value.trim();
       if (!val) return;
       const hit = searchStops(val, STOPS, 1)[0];
+      AppState.autoFollow = false; // manual pick — stop GPS from yanking the view away
       if (hit) this.updateArrivalResults(hit.code);
       else if (isValidStopCode(val)) this.updateArrivalResults(val);
       else alert(TRANSLATIONS[AppState.currentLang].not_found);
@@ -178,7 +186,7 @@ const App = {
     document.getElementById('search-button').addEventListener('click', doSearch);
     document.getElementById('stop-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
 
-    document.getElementById('geo-button').addEventListener('click', () => this.locate(false));
+    document.getElementById('geo-button').addEventListener('click', () => this.goNearest());
     document.getElementById('refresh-button').addEventListener('click', () => this.updateArrivalResults(AppState.selectedStopCode));
 
     document.getElementById('toggle-dark-light').addEventListener('click', () => {
@@ -187,14 +195,11 @@ const App = {
       this.applyTheme();
     });
 
-    document.getElementById('toggle-text-size').addEventListener('click', (e) => {
+    document.getElementById('toggle-text-size').addEventListener('click', () => {
       const sizes = ['default', 'large', 'xlarge'];
-      const labels = ['A', 'A+', 'A++'];
-      const next = (sizes.indexOf(AppState.textSize) + 1) % sizes.length;
-      AppState.textSize = sizes[next];
-      e.target.textContent = labels[next];
+      AppState.textSize = sizes[(sizes.indexOf(AppState.textSize) + 1) % sizes.length];
       localStorage.setItem('textSize', AppState.textSize);
-      this.applyTheme();
+      this.applyTheme(); // applyTheme syncs the A/A+/A++ label too
     });
 
     document.querySelectorAll('.language-toggle button').forEach((btn) => {
@@ -211,7 +216,7 @@ const App = {
     const fav = document.getElementById('favorites-container');
     fav.addEventListener('click', (e) => {
       const card = e.target.closest('.favorite-card');
-      if (card) this.updateArrivalResults(card.dataset.code);
+      if (card) { AppState.autoFollow = false; this.updateArrivalResults(card.dataset.code); }
     });
     fav.addEventListener('contextmenu', (e) => {
       const card = e.target.closest('.favorite-card');
@@ -242,7 +247,15 @@ const App = {
 
   renderFavorites() {
     const container = document.getElementById('favorites-container');
-    container.innerHTML = Frecency.top().map((fav) => {
+    let list = Frecency.top(5);
+    // The currently selected stop (from Search / Near Me / a tap) always shows first.
+    const sel = AppState.selectedStopCode;
+    if (sel) {
+      list = list.filter((s) => s.code !== sel);
+      const selData = Frecency.getAll()[sel] || { code: sel };
+      list = [selData, ...list].slice(0, 5);
+    }
+    container.innerHTML = list.map((fav) => {
       const detail = findByCode(fav.code, STOPS);
       const name = fav.customName || detail?.name || `Stop ${fav.code}`;
       const road = detail?.road || '';
@@ -267,27 +280,44 @@ const App = {
     this.renderFavorites();
   },
 
-  /** Find the nearest stop by GPS and load it. silent=true for the on-load auto-locate. */
-  locate(silent = false) {
-    if (!navigator.geolocation) { if (!silent) alert('Geolocation not supported'); return; }
+  /** Continuously follow GPS. While autoFollow is on, the nearest stop auto-loads as you move. */
+  startTracking() {
+    if (!navigator.geolocation) return;
     const list = document.getElementById('arrival-list');
     if (!AppState.selectedStopCode) {
       list.innerHTML = `<div class="initial-placeholder">${TRANSLATIONS[AppState.currentLang].locating}</div>`;
     }
-    navigator.geolocation.getCurrentPosition(
+    AppState.watchId = navigator.geolocation.watchPosition(
       (pos) => {
-        const nearest = findNearest(pos.coords.latitude, pos.coords.longitude, STOPS);
-        if (nearest) this.updateArrivalResults(nearest.code); // also fills the search bar with the code
-        else if (!silent) alert('No nearby stop found.');
+        AppState.userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        const nearest = findNearest(AppState.userPos.lat, AppState.userPos.lng, STOPS);
+        // Auto-switch only while following and only when the nearest stop actually changes
+        // (so walking past stops updates you, but standing still doesn't re-fetch).
+        if (nearest && AppState.autoFollow && nearest.code !== AppState.selectedStopCode) {
+          this.updateArrivalResults(nearest.code);
+        }
       },
       () => {
-        if (!silent) alert('Unable to retrieve location.');
-        else if (!AppState.selectedStopCode) {
+        if (!AppState.selectedStopCode) {
           list.innerHTML = `<div class="initial-placeholder">${TRANSLATIONS[AppState.currentLang].select_stop_prompt}</div>`;
         }
       },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 5000 }
     );
+  },
+
+  /** "Near Me" — resume following and jump to the current nearest stop now. */
+  goNearest() {
+    AppState.autoFollow = true;
+    if (AppState.userPos) {
+      const nearest = findNearest(AppState.userPos.lat, AppState.userPos.lng, STOPS);
+      if (nearest) return this.updateArrivalResults(nearest.code);
+    }
+    if (!AppState.watchId) this.startTracking();
+    else {
+      const list = document.getElementById('arrival-list');
+      list.innerHTML = `<div class="initial-placeholder">${TRANSLATIONS[AppState.currentLang].locating}</div>`;
+    }
   },
 
   async updateArrivalResults(stopCode) {

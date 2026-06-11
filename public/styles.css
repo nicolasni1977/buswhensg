@@ -56,8 +56,10 @@ body {
     overflow: hidden;               /* PAGE never scrolls */
     transition: background-color var(--transition-fast), color var(--transition-fast);
 }
-body.text-size-large  { font-size: 1.12rem; }
-body.text-size-xlarge { font-size: 1.28rem; }
+/* Text size: scale the ROOT so every rem-based size in the UI grows together. */
+html { font-size: 100%; }
+html.text-size-large  { font-size: 118%; }
+html.text-size-xlarge { font-size: 136%; }
 
 .sr-only {
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -246,4 +248,17 @@ body.text-size-xlarge { font-size: 1.28rem; }
     .search-row { grid-column: 1; grid-row: 1; align-self: start; }
     .map-wrapper { grid-column: 2; grid-row: 1; height: auto; min-height: 150px; max-height: none; }
     .arrivals { grid-column: 1 / -1; grid-row: 2; }
+}
+
+/* Desktop / large screens: present the app as a centred phone-style card */
+@media (min-width: 700px) {
+    body { display: flex; align-items: center; justify-content: center; padding: 20px;
+           background: var(--color-neutral-200); }
+    .theme-dark { background: #0a1120; }
+    .app {
+        height: min(100dvh - 40px, 900px);
+        border: 1px solid var(--color-border);
+        border-radius: 20px;
+        box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+    }
 }
