@@ -60,6 +60,7 @@ const TRANSLATIONS = {
     loading: 'Fetching live arrivals…', no_data: 'No buses running for this stop right now.',
     not_found: 'Stop not found — try a 5-digit code.', arriving: 'Arriving',
     track_hint: 'Tap to see route on map', tracking_on: 'Tracking on map ✓',
+    live: 'LIVE', no_gps: 'No live GPS for this bus yet — showing its route only',
     crowding: { low: 'Seats', med: 'Standing', high: 'Packed' },
   },
   zh: {
@@ -71,6 +72,7 @@ const TRANSLATIONS = {
     loading: '正在获取实时数据…', no_data: '该站点目前没有巴士。',
     not_found: '找不到站点 — 请输入5位代码。', arriving: '即将到达',
     track_hint: '点按在地图上查看路线', tracking_on: '正在地图上追踪 ✓',
+    live: '实时', no_gps: '该班车暂无实时定位 — 仅显示路线',
     crowding: { low: '有座位', med: '站立', high: '拥挤' },
   },
   ms: {
@@ -82,6 +84,7 @@ const TRANSLATIONS = {
     loading: 'Mengambil data masa nyata…', no_data: 'Tiada bas untuk hentian ini sekarang.',
     not_found: 'Hentian tidak dijumpai — cuba kod 5-digit.', arriving: 'Tiba',
     track_hint: 'Tekan untuk lihat laluan di peta', tracking_on: 'Menjejak di peta ✓',
+    live: 'LANGSUNG', no_gps: 'Tiada GPS langsung untuk bas ini — laluan sahaja',
     crowding: { low: 'Tempat duduk', med: 'Berdiri', high: 'Penuh' },
   },
 };
@@ -228,23 +231,42 @@ const App = {
     // keep the selected stop visible on the route
     const stop = findByCode(AppState.selectedStopCode, STOPS);
     if (stop) L.marker([stop.lat, stop.lng], { icon: L.divIcon(STOP_ICON) }).addTo(AppState.routeLayer);
-    // blue water-drop pin on the live bus (fallback to route start if no GPS yet)
-    const bus = svc.arrivals[0];
-    const pos = bus && bus.lat ? [bus.lat, bus.lng] : latlngs[0];
-    AppState.busMarker = L.marker(pos, { icon: L.divIcon(BUS_ICON), zIndexOffset: 1000 })
-      .addTo(AppState.routeLayer)
-      .bindPopup(`<b>Bus ${esc(service)}</b><br>${esc(svc.dest)}`);
     AppState.map.fitBounds(line.getBounds(), { padding: [24, 24] });
+    // Only show a moving pin if LTA actually reports this bus's live GPS.
+    const bus = svc.arrivals[0];
+    if (bus && bus.lat) {
+      this.placeBusMarker(bus, service, svc.dest);
+      this.setMapNotice(null);
+    } else {
+      this.setMapNotice(TRANSLATIONS[AppState.currentLang].no_gps);
+    }
     this.renderArrivals(AppState.lastServices); // mark the card as tracking
   },
 
-  /** Move the tracked bus's pin to its latest GPS position (called on each refresh). */
+  placeBusMarker(bus, service, dest) {
+    if (AppState.busMarker) { AppState.busMarker.setLatLng([bus.lat, bus.lng]); return; }
+    AppState.busMarker = L.marker([bus.lat, bus.lng], { icon: L.divIcon(BUS_ICON), zIndexOffset: 1000 })
+      .addTo(AppState.routeLayer)
+      .bindPopup(`<b>Bus ${esc(service)}</b><br>${esc(dest)}`);
+  },
+
+  /** Move the tracked bus's pin to its latest GPS (called on each refresh). */
   updateTrackedBus() {
-    if (!AppState.trackedService || !AppState.busMarker) return;
+    if (!AppState.trackedService || !AppState.routeLayer) return;
     const svc = (AppState.lastServices || []).find((s) => s.service === AppState.trackedService);
     const bus = svc && svc.arrivals[0];
-    if (bus && bus.lat) AppState.busMarker.setLatLng([bus.lat, bus.lng]);
-    // if the bus has passed the stop it drops out of the feed — keep the route shown.
+    if (bus && bus.lat) {
+      this.placeBusMarker(bus, AppState.trackedService, svc.dest); // appears/moves when GPS arrives
+      this.setMapNotice(null);
+    } else if (!AppState.busMarker) {
+      this.setMapNotice(TRANSLATIONS[AppState.currentLang].no_gps); // still no GPS
+    }
+  },
+
+  setMapNotice(msg) {
+    const el = document.getElementById('map-notice');
+    if (!el) return;
+    if (msg) { el.textContent = msg; el.hidden = false; } else { el.hidden = true; }
   },
 
   clearTracking() {
@@ -252,6 +274,7 @@ const App = {
     AppState.routeLayer = null;
     AppState.busMarker = null;
     AppState.trackedService = null;
+    this.setMapNotice(null);
   },
 
   setupEventListeners() {
@@ -446,12 +469,14 @@ const App = {
     }
     list.innerHTML = services.map((svc) => {
       const tracked = AppState.trackedService === svc.service;
+      const live = !!(svc.arrivals[0] && svc.arrivals[0].lat); // has live GPS → trackable on map
       return `
       <button type="button" class="arrival-card primary${tracked ? ' tracking' : ''}" data-service="${esc(svc.service)}"
               aria-pressed="${tracked}" aria-label="Show route and track bus ${esc(svc.service)} on the map">
         <div class="service-info">
           <span class="service-no">${esc(svc.service)}</span>
           <span class="service-dest">${esc(svc.dest)}</span>
+          ${live ? `<span class="live-badge">● ${t.live}</span>` : ''}
           <span class="track-hint">${tracked ? t.tracking_on : t.track_hint}</span>
         </div>
         <div class="arrival-times">

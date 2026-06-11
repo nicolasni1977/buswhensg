@@ -215,6 +215,15 @@ html.text-size-xlarge { font-size: 136%; }
 .track-hint { font-size: 0.66rem; color: var(--color-neutral-500); margin-top: 2px; }
 .arrival-card.tracking .track-hint { color: var(--color-primary); font-weight: 700; }
 
+.live-badge { font-size: 0.6rem; font-weight: 700; color: var(--color-success); letter-spacing: .04em; margin-top: 1px; }
+
+.map-notice {
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 1000;
+    background: rgba(15,23,42,.9); color: #fff; font-size: 0.72rem; line-height: 1.3;
+    padding: 6px 12px; border-radius: var(--radius-full); max-width: 92%; text-align: center;
+}
+.map-notice[hidden] { display: none; }
+
 /* Map markers (Leaflet divIcons) */
 .bus-pin { filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); }
 .stop-dot span { display: block; width: 14px; height: 14px; border-radius: 50%;
