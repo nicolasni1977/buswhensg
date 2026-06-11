@@ -4,8 +4,8 @@
   "description": "Free live Singapore bus arrival times. Auto-finds your nearest bus stop and lists when the next buses arrive.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#F3EEE5",
-  "theme_color": "#BC6B4C",
+  "background_color": "#ffffff",
+  "theme_color": "#E60000",
   "lang": "en",
   "categories": ["travel", "navigation", "utilities"],
   "icons": [
