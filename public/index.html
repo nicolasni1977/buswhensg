@@ -3,8 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="description" content="BusWhenSG — live Singapore bus arrival times. Simple, accessible, free.">
-    <title>BusWhenSG | Live Bus Arrivals</title>
+    <title>BusWhenSG — Live Singapore Bus Arrival Times</title>
+    <meta name="description" content="Free, simple live bus arrival times for Singapore. Auto-finds your nearest bus stop and shows when the next buses arrive — in English, 中文 and Bahasa Melayu.">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#E60000">
+    <link rel="canonical" href="https://buswhensg.me/">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+
+    <!-- Open Graph / Twitter (link previews) -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="BusWhenSG">
+    <meta property="og:title" content="BusWhenSG — Live Singapore Bus Arrival Times">
+    <meta property="og:description" content="Auto-finds your nearest bus stop and shows live arrival times for every bus. Free, fast, simple.">
+    <meta property="og:url" content="https://buswhensg.me/">
+    <meta property="og:image" content="https://buswhensg.me/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:locale" content="en_SG">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="BusWhenSG — Live Singapore Bus Arrival Times">
+    <meta name="twitter:description" content="Live bus arrivals for Singapore. Auto-finds your nearest stop.">
+    <meta name="twitter:image" content="https://buswhensg.me/og.png">
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "BusWhenSG",
+      "alternateName": "BusWhenSG — Singapore Bus Arrival Times",
+      "url": "https://buswhensg.me/",
+      "description": "Free live Singapore bus arrival times. Auto-finds your nearest bus stop and lists when the next buses arrive.",
+      "applicationCategory": "TravelApplication",
+      "operatingSystem": "Web",
+      "browserRequirements": "Requires JavaScript and a modern browser",
+      "inLanguage": ["en", "zh", "ms"],
+      "areaServed": { "@type": "Country", "name": "Singapore" },
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "SGD" }
+    }
+    </script>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

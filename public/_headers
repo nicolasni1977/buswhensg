@@ -16,3 +16,11 @@
   Cache-Control: public, max-age=86400
 /routes.json
   Cache-Control: public, max-age=86400
+
+# Branding images rarely change.
+/og.png
+  Cache-Control: public, max-age=604800
+/icon-192.png
+  Cache-Control: public, max-age=604800
+/icon-512.png
+  Cache-Control: public, max-age=604800
