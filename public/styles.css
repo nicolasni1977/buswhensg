@@ -19,9 +19,9 @@
     --color-card-bg: var(--color-white);
     --color-border: var(--color-neutral-200);
 
-    --font-heading: 'JetBrains Mono', monospace;
-    --font-body: 'Inter', system-ui, sans-serif;
-    --font-mono: 'JetBrains Mono', monospace;
+    --font-heading: 'Onest', sans-serif;
+    --font-body: 'Onest', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;  /* numeric arrival times only */
 
     --radius-sm: 4px;
     --radius-md: 8px;
