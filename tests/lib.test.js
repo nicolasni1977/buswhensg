@@ -7,6 +7,8 @@ import {
   frecencyTop,
   arrivalText,
   isValidStopCode,
+  pickRouteDirection,
+  routeToLatLngs,
 } from '../public/lib.js';
 
 const STOPS = [
@@ -115,5 +117,30 @@ describe('isValidStopCode', () => {
     expect(isValidStopCode('123')).toBe(false);
     expect(isValidStopCode('abcde')).toBe(false);
     expect(isValidStopCode('123456')).toBe(false);
+  });
+});
+
+describe('pickRouteDirection', () => {
+  const routes = { '10:1': ['A', 'B', 'C'], '10:2': ['C', 'B', 'A'], '20:1': ['P', 'Q'] };
+  it('prefers the direction ending at the destination code', () => {
+    expect(pickRouteDirection(routes, '10', 'B', 'A')).toEqual(['C', 'B', 'A']);
+    expect(pickRouteDirection(routes, '10', 'B', 'C')).toEqual(['A', 'B', 'C']);
+  });
+  it('falls back to the only existing direction', () => {
+    expect(pickRouteDirection(routes, '20', 'P', 'Q')).toEqual(['P', 'Q']);
+  });
+  it('returns null for an unknown service', () => {
+    expect(pickRouteDirection(routes, '99', 'X', 'Y')).toBeNull();
+  });
+});
+
+describe('routeToLatLngs', () => {
+  const index = { A: { lat: 1.1, lng: 2.2 }, B: { lat: 3.3, lng: 4.4 } };
+  it('maps codes to coords, skipping unknowns', () => {
+    expect(routeToLatLngs(['A', 'X', 'B'], index)).toEqual([[1.1, 2.2], [3.3, 4.4]]);
+  });
+  it('handles empty input', () => {
+    expect(routeToLatLngs([], index)).toEqual([]);
+    expect(routeToLatLngs(undefined, index)).toEqual([]);
   });
 });

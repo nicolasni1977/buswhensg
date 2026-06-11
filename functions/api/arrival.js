@@ -19,10 +19,15 @@ function minutesFromNow(iso) {
 function normalizeBus(bus) {
   const min = minutesFromNow(bus && bus.EstimatedArrival);
   if (min === null) return null;
+  const lat = parseFloat(bus.Latitude);
+  const lng = parseFloat(bus.Longitude);
   return {
     min,
     crowding: LOAD_TO_CROWDING[bus.Load] || "low",
     wc: bus.Feature === "WAB",
+    // Live GPS position of this bus (0/NaN => unavailable). Used for map tracking.
+    lat: lat || null,
+    lng: lng || null,
   };
 }
 
@@ -62,6 +67,7 @@ export const onRequestGet = async ({ request, env }) => {
       service: s.ServiceNo,
       // DataMall gives only a destination bus-stop CODE, not a friendly name.
       dest: s.NextBus && s.NextBus.DestinationCode ? `To ${s.NextBus.DestinationCode}` : "",
+      destCode: (s.NextBus && s.NextBus.DestinationCode) || "", // for route-direction matching
       arrivals: [s.NextBus, s.NextBus2, s.NextBus3].map(normalizeBus).filter(Boolean),
     }))
     .filter((s) => s.arrivals.length > 0)

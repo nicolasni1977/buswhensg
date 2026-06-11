@@ -11,6 +11,8 @@ import {
   frecencyTop,
   arrivalText,
   isValidStopCode,
+  pickRouteDirection,
+  routeToLatLngs,
 } from './lib.js';
 
 const AppState = {
@@ -27,6 +29,22 @@ const AppState = {
   autoFollow: true,   // follow GPS to nearest stop until the user picks a stop manually
   watchId: null,
   userPos: null,
+  lastServices: [],   // most recent /api/arrival result (for the tracked bus position)
+  routes: null,       // lazy-loaded routes.json (service:dir -> ordered stop codes)
+  stopIndex: {},      // code -> {lat,lng,name,road}
+  trackedService: null,
+  routeLayer: null,
+  busMarker: null,
+};
+
+// Blue water-drop pin for the live bus; red dot for the selected stop (so they differ).
+const BUS_ICON = {
+  className: 'bus-pin',
+  html: '<svg viewBox="0 0 24 34" width="30" height="42" aria-label="bus"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 22 12 22s12-13 12-22C24 5.4 18.6 0 12 0z" fill="#2563eb" stroke="#fff" stroke-width="2"/><circle cx="12" cy="12" r="4.6" fill="#fff"/></svg>',
+  iconSize: [30, 42], iconAnchor: [15, 42], popupAnchor: [0, -38],
+};
+const STOP_ICON = {
+  className: 'stop-dot', html: '<span></span>', iconSize: [18, 18], iconAnchor: [9, 9],
 };
 
 // Full Singapore bus-stop list, loaded at startup from stops.json (~5,200 stops).
@@ -41,6 +59,7 @@ const TRANSLATIONS = {
     locating: 'Finding your nearest bus stop…',
     loading: 'Fetching live arrivals…', no_data: 'No buses running for this stop right now.',
     not_found: 'Stop not found — try a 5-digit code.', arriving: 'Arriving',
+    track_hint: 'Tap to see route on map', tracking_on: 'Tracking on map ✓',
     crowding: { low: 'Seats', med: 'Standing', high: 'Packed' },
   },
   zh: {
@@ -51,6 +70,7 @@ const TRANSLATIONS = {
     locating: '正在查找最近的巴士站…',
     loading: '正在获取实时数据…', no_data: '该站点目前没有巴士。',
     not_found: '找不到站点 — 请输入5位代码。', arriving: '即将到达',
+    track_hint: '点按在地图上查看路线', tracking_on: '正在地图上追踪 ✓',
     crowding: { low: '有座位', med: '站立', high: '拥挤' },
   },
   ms: {
@@ -61,6 +81,7 @@ const TRANSLATIONS = {
     locating: 'Mencari hentian bas terdekat…',
     loading: 'Mengambil data masa nyata…', no_data: 'Tiada bas untuk hentian ini sekarang.',
     not_found: 'Hentian tidak dijumpai — cuba kod 5-digit.', arriving: 'Tiba',
+    track_hint: 'Tekan untuk lihat laluan di peta', tracking_on: 'Menjejak di peta ✓',
     crowding: { low: 'Tempat duduk', med: 'Berdiri', high: 'Penuh' },
   },
 };
@@ -119,10 +140,19 @@ const App = {
   async loadStops() {
     try {
       STOPS = await (await fetch('./stops.json')).json();
+      AppState.stopIndex = Object.fromEntries(STOPS.map((s) => [s.code, s]));
     } catch (e) {
       console.error('Failed to load stops.json', e);
       STOPS = [];
     }
+  },
+
+  /** Lazy-load routes.json (only when the user first tracks a bus). */
+  async ensureRoutes() {
+    if (AppState.routes) return AppState.routes;
+    try { AppState.routes = await (await fetch('./routes.json')).json(); }
+    catch (e) { console.error('Failed to load routes.json', e); AppState.routes = {}; }
+    return AppState.routes;
   },
 
   loadState() {
@@ -158,7 +188,7 @@ const App = {
       tiles.on('tileerror', () => { document.getElementById('map-wrapper').style.display = 'none'; });
       tiles.addTo(AppState.map);
       // A single marker for the selected stop (NOT all ~5,200 — that would kill perf).
-      AppState.stopMarker = L.marker([1.3521, 103.8198]);
+      AppState.stopMarker = L.marker([1.3521, 103.8198], { icon: L.divIcon(STOP_ICON) });
       const sel = AppState.selectedStopCode && findByCode(AppState.selectedStopCode, STOPS);
       if (sel) this.focusMap(sel);
     } catch (e) {
@@ -171,6 +201,57 @@ const App = {
     AppState.stopMarker.setLatLng([stop.lat, stop.lng]).addTo(AppState.map)
       .bindPopup(`<b>${esc(stop.name)}</b><br>${esc(stop.road)} · ${stop.code}`);
     AppState.map.setView([stop.lat, stop.lng], 16);
+  },
+
+  /** Tap a bus → draw its full route, zoom out to fit it, drop a blue pin on the live bus. */
+  async trackBus(service) {
+    if (AppState.trackedService === service) { // tap again to stop tracking
+      this.clearTracking();
+      const stop = findByCode(AppState.selectedStopCode, STOPS);
+      if (stop) this.focusMap(stop);
+      this.renderArrivals(AppState.lastServices);
+      return;
+    }
+    if (!AppState.map) this.initMap();
+    await this.ensureRoutes();
+    const svc = (AppState.lastServices || []).find((s) => s.service === service);
+    if (!svc || !AppState.map) return;
+
+    const stopCodes = pickRouteDirection(AppState.routes, service, AppState.selectedStopCode, svc.destCode);
+    const latlngs = routeToLatLngs(stopCodes || [], AppState.stopIndex);
+    if (latlngs.length < 2) return; // no usable route geometry
+
+    this.clearTracking();
+    AppState.trackedService = service;
+    AppState.routeLayer = L.layerGroup().addTo(AppState.map);
+    const line = L.polyline(latlngs, { color: '#2563eb', weight: 5, opacity: 0.85 }).addTo(AppState.routeLayer);
+    // keep the selected stop visible on the route
+    const stop = findByCode(AppState.selectedStopCode, STOPS);
+    if (stop) L.marker([stop.lat, stop.lng], { icon: L.divIcon(STOP_ICON) }).addTo(AppState.routeLayer);
+    // blue water-drop pin on the live bus (fallback to route start if no GPS yet)
+    const bus = svc.arrivals[0];
+    const pos = bus && bus.lat ? [bus.lat, bus.lng] : latlngs[0];
+    AppState.busMarker = L.marker(pos, { icon: L.divIcon(BUS_ICON), zIndexOffset: 1000 })
+      .addTo(AppState.routeLayer)
+      .bindPopup(`<b>Bus ${esc(service)}</b><br>${esc(svc.dest)}`);
+    AppState.map.fitBounds(line.getBounds(), { padding: [24, 24] });
+    this.renderArrivals(AppState.lastServices); // mark the card as tracking
+  },
+
+  /** Move the tracked bus's pin to its latest GPS position (called on each refresh). */
+  updateTrackedBus() {
+    if (!AppState.trackedService || !AppState.busMarker) return;
+    const svc = (AppState.lastServices || []).find((s) => s.service === AppState.trackedService);
+    const bus = svc && svc.arrivals[0];
+    if (bus && bus.lat) AppState.busMarker.setLatLng([bus.lat, bus.lng]);
+    // if the bus has passed the stop it drops out of the feed — keep the route shown.
+  },
+
+  clearTracking() {
+    if (AppState.routeLayer && AppState.map) AppState.map.removeLayer(AppState.routeLayer);
+    AppState.routeLayer = null;
+    AppState.busMarker = null;
+    AppState.trackedService = null;
   },
 
   setupEventListeners() {
@@ -221,6 +302,12 @@ const App = {
     fav.addEventListener('contextmenu', (e) => {
       const card = e.target.closest('.favorite-card');
       if (card) { e.preventDefault(); this.handleFavoriteMenu(card.dataset.code); }
+    });
+
+    // Tap a bus card → show its route on the map and track the bus.
+    document.getElementById('arrival-list').addEventListener('click', (e) => {
+      const card = e.target.closest('.arrival-card');
+      if (card && card.dataset.service) this.trackBus(card.dataset.service);
     });
 
     document.addEventListener('visibilitychange', () => {
@@ -322,25 +409,30 @@ const App = {
 
   async updateArrivalResults(stopCode) {
     if (!stopCode) return;
+    const sameStop = stopCode === AppState.selectedStopCode; // a refresh vs a new stop
     AppState.selectedStopCode = stopCode;
     const stop = findByCode(stopCode, STOPS);
 
+    if (!sameStop) this.clearTracking(); // switching stops drops any tracked bus
     document.getElementById('selected-stop').textContent = stop
       ? `${stop.name} · ${stop.road} · ${stop.code}`
       : `Stop ${stopCode}`;
     document.getElementById('stop-search').value = stopCode; // auto-fill the stop ID in the search bar
     Frecency.saveVisit(stopCode);
     this.renderFavorites();
-    if (stop) this.focusMap(stop);
+    if (stop && !AppState.trackedService) this.focusMap(stop); // don't override the route view
 
     const list = document.getElementById('arrival-list');
-    list.innerHTML = `<div class="initial-placeholder">${TRANSLATIONS[AppState.currentLang].loading}</div>`;
+    if (!sameStop) list.innerHTML = `<div class="initial-placeholder">${TRANSLATIONS[AppState.currentLang].loading}</div>`;
     try {
-      this.renderArrivals(await fetchArrivals(stopCode));
+      const services = await fetchArrivals(stopCode);
+      AppState.lastServices = services;
+      this.renderArrivals(services);
+      if (AppState.trackedService) this.updateTrackedBus(); // move the pin on each refresh
       AppState.lastUpdated = Date.now();
       document.getElementById('last-updated').textContent = '0';
     } catch (e) {
-      list.innerHTML = `<div class="initial-placeholder">${TRANSLATIONS[AppState.currentLang].no_data}</div>`;
+      if (!AppState.trackedService) list.innerHTML = `<div class="initial-placeholder">${TRANSLATIONS[AppState.currentLang].no_data}</div>`;
     }
     if (!AppState.refreshInterval) this.startRefreshTimer();
   },
@@ -352,11 +444,15 @@ const App = {
       list.innerHTML = `<div class="initial-placeholder">${t.no_data}</div>`;
       return;
     }
-    list.innerHTML = services.map((svc) => `
-      <div class="arrival-card primary">
+    list.innerHTML = services.map((svc) => {
+      const tracked = AppState.trackedService === svc.service;
+      return `
+      <button type="button" class="arrival-card primary${tracked ? ' tracking' : ''}" data-service="${esc(svc.service)}"
+              aria-pressed="${tracked}" aria-label="Show route and track bus ${esc(svc.service)} on the map">
         <div class="service-info">
           <span class="service-no">${esc(svc.service)}</span>
           <span class="service-dest">${esc(svc.dest)}</span>
+          <span class="track-hint">${tracked ? t.tracking_on : t.track_hint}</span>
         </div>
         <div class="arrival-times">
           ${this.renderArrivalLine(svc.service, svc.arrivals[0], true)}
@@ -365,7 +461,8 @@ const App = {
             ${this.renderArrivalLine(svc.service, svc.arrivals[2], false)}
           </div>
         </div>
-      </div>`).join('');
+      </button>`;
+    }).join('');
   },
 
   renderArrivalLine(serviceCode, arrival, isPrimary) {

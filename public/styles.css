@@ -206,7 +206,20 @@ html.text-size-xlarge { font-size: 136%; }
     border-left: 6px solid var(--color-primary); border-radius: var(--radius-md);
     padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;
     gap: 12px; box-shadow: var(--shadow-sm);
+    /* now a <button> — reset and make tappable */
+    width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer;
+    appearance: none; -webkit-appearance: none; transition: border-color var(--transition-fast);
 }
+.arrival-card:hover { border-color: var(--color-primary); }
+.arrival-card.tracking { border-color: var(--color-primary); box-shadow: 0 0 0 2px var(--color-primary) inset; background: var(--color-primary-light); }
+.track-hint { font-size: 0.66rem; color: var(--color-neutral-500); margin-top: 2px; }
+.arrival-card.tracking .track-hint { color: var(--color-primary); font-weight: 700; }
+
+/* Map markers (Leaflet divIcons) */
+.bus-pin { filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); }
+.stop-dot span { display: block; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--color-primary); border: 3px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
+
 .service-info { display: flex; flex-direction: column; gap: 2px; min-width: 56px; }
 .service-no { font-family: var(--font-heading); font-size: 1.45rem; font-weight: 700; color: var(--color-primary); }
 .service-dest { font-size: 0.78rem; color: var(--color-neutral-700); }

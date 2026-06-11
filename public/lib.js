@@ -71,3 +71,27 @@ export function arrivalText(min, arrivingWord = 'Arriving') {
 export function isValidStopCode(code) {
   return /^\d{5}$/.test(code);
 }
+
+/**
+ * Pick the ordered stop list for the service direction the inbound bus is on.
+ * routes: { "<service>:<dir>": [stopCode,...] }. Prefer the direction that
+ * passes the selected stop and ends at the bus's destination code.
+ */
+export function pickRouteDirection(routes, service, selectedStop, destCode) {
+  const cands = [`${service}:1`, `${service}:2`].filter((k) => Array.isArray(routes[k]));
+  if (!cands.length) return null;
+  const withStop = cands.filter((k) => routes[k].includes(selectedStop));
+  const pool = withStop.length ? withStop : cands;
+  const byDest = pool.find((k) => routes[k][routes[k].length - 1] === destCode);
+  return routes[byDest || pool[0]];
+}
+
+/** Map ordered stop codes to [lat,lng] pairs, skipping any not in the stop index. */
+export function routeToLatLngs(stopCodes, stopIndex) {
+  const out = [];
+  for (const code of stopCodes || []) {
+    const s = stopIndex[code];
+    if (s && Number.isFinite(s.lat) && Number.isFinite(s.lng)) out.push([s.lat, s.lng]);
+  }
+  return out;
+}

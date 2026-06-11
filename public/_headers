@@ -11,6 +11,8 @@
 /styles.css
   Cache-Control: no-cache
 
-# The stop list is large and changes rarely — let it cache for a day.
+# Large, rarely-changing datasets — cache for a day.
 /stops.json
+  Cache-Control: public, max-age=86400
+/routes.json
   Cache-Control: public, max-age=86400
