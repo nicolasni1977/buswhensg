@@ -105,6 +105,29 @@ export function busProgress(busLat, busLng, stopCodes, stopIndex, userStop) {
   return { busIdx, userIdx, stopsAway };
 }
 
+/**
+ * APPROXIMATE per-stop ETAs (minutes), distributing the bus's known ETA-to-user
+ * across the route by cumulative distance. Returns an array aligned to stopCodes
+ * (null for passed/unknown stops). Honest approximation — label it "~" in the UI.
+ */
+export function routeStopEtas(stopCodes, stopIndex, busIdx, userIdx, etaMin) {
+  const n = (stopCodes || []).length;
+  const etas = new Array(n).fill(null);
+  if (busIdx < 0 || userIdx <= busIdx || etaMin == null) return etas;
+  const cum = new Array(n).fill(0);
+  for (let i = busIdx + 1; i < n; i++) {
+    const a = stopIndex[stopCodes[i - 1]];
+    const b = stopIndex[stopCodes[i]];
+    cum[i] = cum[i - 1] + (a && b ? haversineKm(a.lat, a.lng, b.lat, b.lng) : 0);
+  }
+  const base = cum[userIdx];
+  for (let i = busIdx + 1; i < n; i++) {
+    const ratio = base > 0 ? cum[i] / base : (i - busIdx) / (userIdx - busIdx);
+    etas[i] = Math.max(1, Math.round(etaMin * ratio));
+  }
+  return etas;
+}
+
 /** Map ordered stop codes to [lat,lng] pairs, skipping any not in the stop index. */
 export function routeToLatLngs(stopCodes, stopIndex) {
   const out = [];

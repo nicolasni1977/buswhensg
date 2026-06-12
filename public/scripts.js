@@ -14,6 +14,7 @@ import {
   pickRouteDirection,
   routeToLatLngs,
   busProgress,
+  routeStopEtas,
 } from './lib.js';
 
 // Local-flavour copy for the bus "journey card" (Singlish for EN; localised for zh/ms).
@@ -31,6 +32,7 @@ const JOURNEY = {
     stops_away: (n) => `${n} stop${n === 1 ? '' : 's'} away`,
     arriving_in: (m) => (m <= 1 ? 'Arriving now' : `${m} min away`),
     bus_here: '🚌 your bus is around here', you_here: '📍 your stop',
+    near: 'Now near', approx: '~', cheer: 'Your bus is 1 stop away! 🎉',
   },
   zh: {
     crowd: { low: '有座位 🪑', med: '只能站着 🧍', high: '非常拥挤 🥵' },
@@ -44,6 +46,7 @@ const JOURNEY = {
     stops_away: (n) => `还有 ${n} 站`,
     arriving_in: (m) => (m <= 1 ? '即将到达' : `还有 ${m} 分钟`),
     bus_here: '🚌 巴士大约在这里', you_here: '📍 您的站',
+    near: '目前接近', approx: '约', cheer: '巴士还有一站就到！🎉',
   },
   ms: {
     crowd: { low: 'Ada tempat duduk 🪑', med: 'Berdiri sahaja 🧍', high: 'Sangat sesak 🥵' },
@@ -57,6 +60,7 @@ const JOURNEY = {
     stops_away: (n) => `${n} hentian lagi`,
     arriving_in: (m) => (m <= 1 ? 'Tiba sekarang' : `${m} min lagi`),
     bus_here: '🚌 bas anda di sekitar sini', you_here: '📍 hentian anda',
+    near: 'Berhampiran', approx: '~', cheer: 'Bas anda 1 hentian lagi! 🎉',
   },
 };
 
@@ -82,6 +86,7 @@ const AppState = {
   routeLayer: null,
   busMarker: null,
   busAnim: null,
+  celebratedFor: null, // avoid repeating the 1-stop-away celebration
 };
 
 const REDUCE_MOTION = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -313,8 +318,8 @@ const App = {
     this.glideMarker(AppState.busMarker, [from.lat, from.lng], target);
   },
 
-  /** The "wow" bus journey card: where the bus is, how many stops away, crowd in Singlish, a local quip. */
-  showRouteStops() {
+  /** The "wow" bus journey card: where the bus is, stops away, per-stop ETAs, Singlish, a local quip. */
+  showRouteStops(animate = true) {
     if (!AppState.trackedStops.length) return;
     const t = TRANSLATIONS[AppState.currentLang];
     const j = JOURNEY[AppState.currentLang] || JOURNEY.en;
@@ -325,15 +330,17 @@ const App = {
       ? busProgress(bus.lat, bus.lng, AppState.trackedStops, AppState.stopIndex, AppState.selectedStopCode)
       : { busIdx: -1, userIdx: AppState.trackedStops.indexOf(AppState.selectedStopCode), stopsAway: null };
     const min = bus ? bus.min : null;
+    const etas = routeStopEtas(AppState.trackedStops, AppState.stopIndex, prog.busIdx, prog.userIdx, min);
     const hr = new Date().getHours();
     const isNight = hr >= 23 || hr < 5;
 
-    // Header (the wow): big stops-away + ETA + crowd in Singlish + a local quip.
+    // Header (the wow): big stops-away + ETA + "now near" landmark + crowd Singlish + a local quip.
     const big = prog.stopsAway == null
       ? (min != null ? j.arriving_in(min) : '—')
       : prog.stopsAway <= 0 ? j.away_here : j.stops_away(prog.stopsAway);
     const sub = (min != null && prog.stopsAway != null && prog.stopsAway > 0) ? `· ${j.arriving_in(min)}` : '';
     const userName = (AppState.stopIndex[AppState.selectedStopCode] || {}).name || `Stop ${AppState.selectedStopCode}`;
+    const nearName = prog.busIdx >= 0 ? (AppState.stopIndex[AppState.trackedStops[prog.busIdx]] || {}).name : '';
     const crowdLine = bus ? j.crowd[bus.crowding] : '';
     const quip = (isNight ? j.night + ' ' : '') + j.quip(prog.stopsAway, min);
 
@@ -342,6 +349,7 @@ const App = {
     document.getElementById('route-journey').innerHTML = `
       <div class="rs-big">${esc(big)} <span class="rs-sub">${esc(sub)}</span></div>
       <div class="rs-toward">${esc(t.arrivals === 'Arrivals' ? 'to' : '→')} ${esc(userName)}</div>
+      ${nearName ? `<div class="rs-near">${esc(j.near)} ${esc(nearName)}</div>` : ''}
       ${crowdLine ? `<div class="rs-crowd crowding-${bus.crowding}">${esc(crowdLine)}</div>` : ''}
       <div class="rs-quip">${esc(quip)}</div>`;
 
@@ -352,22 +360,87 @@ const App = {
       if (code === AppState.selectedStopCode) cls.push('current');
       if (i === prog.busIdx) cls.push('atbus');
       if (prog.busIdx >= 0 && prog.userIdx >= 0 && i > prog.busIdx && i < prog.userIdx) cls.push('between');
+      const tag = code === AppState.selectedStopCode ? j.you_here : (i === prog.busIdx ? j.bus_here : '');
+      const eta = etas[i] != null ? `<span class="route-sheet__eta">${j.approx}${etas[i]}m</span>` : '';
       return `<li class="${cls.join(' ')}" data-code="${esc(code)}">
         <span class="route-sheet__seq">${i === prog.busIdx ? '🚌' : i + 1}</span>
         <span class="route-sheet__code">${esc(code)}</span>
-        <span class="route-sheet__name">${esc(s ? s.name : 'Stop ' + code)}${code === AppState.selectedStopCode ? ' <em class="rs-tag">' + esc(j.you_here) + '</em>' : (i === prog.busIdx ? ' <em class="rs-tag">' + esc(j.bus_here) + '</em>' : '')}</span>
+        <span class="route-sheet__name">${esc(s ? s.name : 'Stop ' + code)}${tag ? ' <em class="rs-tag">' + esc(tag) + '</em>' : ''}</span>
+        ${eta}
       </li>`;
     }).join('');
 
     const sheet = document.getElementById('route-sheet');
     sheet.hidden = false;
     const panel = sheet.querySelector('.route-sheet__panel');
-    if (!REDUCE_MOTION && panel) { panel.classList.remove('rs-pop'); void panel.offsetWidth; panel.classList.add('rs-pop'); }
-    const anchor = list.querySelector('li.atbus') || list.querySelector('li.current');
-    if (anchor) anchor.scrollIntoView({ block: 'center' });
+    if (animate && !REDUCE_MOTION && panel) { panel.classList.remove('rs-pop'); void panel.offsetWidth; panel.classList.add('rs-pop'); }
+    if (animate) {
+      const anchor = list.querySelector('li.atbus') || list.querySelector('li.current');
+      if (anchor) anchor.scrollIntoView({ block: 'center' });
+    }
+
+    // 🎉 Celebrate once when the bus is 1 (or 0) stops away.
+    if (prog.stopsAway != null && prog.stopsAway <= 1 && AppState.celebratedFor !== AppState.trackedService) {
+      AppState.celebratedFor = AppState.trackedService;
+      this.celebrate();
+    }
   },
 
   hideRouteStops() { document.getElementById('route-sheet').hidden = true; },
+
+  /** A subtle celebration when the bus is 1 stop away: confetti + a short horn. */
+  celebrate() {
+    if (!REDUCE_MOTION) this.confetti();
+    this.toot();
+  },
+
+  confetti() {
+    const cv = document.createElement('canvas');
+    Object.assign(cv.style, { position: 'fixed', inset: '0', width: '100%', height: '100%', pointerEvents: 'none', zIndex: '3000' });
+    cv.width = innerWidth; cv.height = innerHeight;
+    document.body.appendChild(cv);
+    const ctx = cv.getContext('2d');
+    const colors = ['#E60000', '#F59E0B', '#16A34A', '#2563eb', '#ec4899'];
+    const N = 110;
+    const parts = Array.from({ length: N }, () => ({
+      x: cv.width / 2, y: cv.height * 0.32,
+      vx: (Math.random() - 0.5) * 11, vy: Math.random() * -11 - 4,
+      s: 4 + Math.random() * 5, c: colors[(Math.random() * colors.length) | 0], r: Math.random() * 6,
+    }));
+    const t0 = performance.now();
+    const draw = (now) => {
+      const el = now - t0;
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      parts.forEach((p) => {
+        p.vy += 0.32; p.x += p.vx; p.y += p.vy; p.r += 0.2;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r);
+        ctx.globalAlpha = Math.max(0, 1 - el / 1400);
+        ctx.fillStyle = p.c; ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s * 0.6); ctx.restore();
+      });
+      if (el < 1500) requestAnimationFrame(draw); else cv.remove();
+    };
+    requestAnimationFrame(draw);
+  },
+
+  toot() {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      const ac = new AC();
+      if (ac.state === 'suspended') ac.resume();
+      const beep = (freq, start, dur) => {
+        const o = ac.createOscillator(); const g = ac.createGain();
+        o.type = 'sawtooth'; o.frequency.value = freq;
+        o.connect(g); g.connect(ac.destination);
+        const s = ac.currentTime + start;
+        g.gain.setValueAtTime(0.0001, s);
+        g.gain.exponentialRampToValueAtTime(0.18, s + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.0001, s + dur);
+        o.start(s); o.stop(s + dur + 0.02);
+      };
+      beep(440, 0, 0.16); beep(440, 0.2, 0.22); // "toot toot" bus horn
+    } catch {}
+  },
 
   /** Smoothly glide the pin from `from` to `to` across (just under) one poll interval. */
   glideMarker(marker, from, to, duration = TRACK_INTERVAL_MS - 1000) {
@@ -394,6 +467,8 @@ const App = {
     } else if (!AppState.busMarker) {
       this.setMapNotice(TRANSLATIONS[AppState.currentLang].no_gps); // still no GPS
     }
+    // Keep the journey card live (stops-away / ETAs update) while it's open.
+    if (!document.getElementById('route-sheet').hidden) this.showRouteStops(false);
   },
 
   setMapNotice(msg) {
@@ -409,6 +484,7 @@ const App = {
     AppState.busMarker = null;
     AppState.trackedService = null;
     AppState.trackedStops = [];
+    AppState.celebratedFor = null;
     this.setMapNotice(null);
     this.hideRouteStops();
     this.startRefreshTimer(); // back to the normal (slower) cadence

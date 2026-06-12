@@ -282,6 +282,9 @@ html.text-size-xlarge { font-size: 136%; }
     color: var(--color-primary); line-height: 1.05; display: inline-block; }
 .rs-sub { font-size: 0.82rem; font-weight: 700; color: var(--color-neutral-700); letter-spacing: 0; }
 .rs-toward { font-size: 0.82rem; color: var(--color-neutral-700); margin-top: 2px; }
+.rs-near { font-size: 0.8rem; color: var(--color-neutral-700); margin-top: 4px; font-weight: 600; }
+.route-sheet__eta { margin-left: auto; font-family: var(--font-mono); font-size: 0.72rem; color: var(--color-neutral-500); white-space: nowrap; }
+.route-sheet__list li { align-items: center; }
 .rs-crowd { display: inline-block; margin-top: 9px; padding: 4px 11px; border-radius: var(--radius-full);
     font-size: 0.74rem; font-weight: 700; }
 .rs-quip { margin-top: 9px; font-size: 0.92rem; color: var(--color-text); }

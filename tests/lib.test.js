@@ -10,6 +10,7 @@ import {
   pickRouteDirection,
   routeToLatLngs,
   busProgress,
+  routeStopEtas,
 } from '../public/lib.js';
 
 const STOPS = [
@@ -146,6 +147,22 @@ describe('busProgress', () => {
   });
   it('returns null stopsAway when the user stop is not on the route', () => {
     expect(busProgress(1.1, 1.1, route, idx, 'Z').stopsAway).toBeNull();
+  });
+});
+
+describe('routeStopEtas', () => {
+  const idx = { A: { lat: 1.0, lng: 1.0 }, B: { lat: 1.01, lng: 1.0 }, C: { lat: 1.02, lng: 1.0 }, D: { lat: 1.03, lng: 1.0 } };
+  const route = ['A', 'B', 'C', 'D'];
+  it('distributes the ETA across upcoming stops (equal spacing → linear)', () => {
+    const e = routeStopEtas(route, idx, 0, 3, 9);
+    expect(e[0]).toBeNull();
+    expect(e[1]).toBe(3);
+    expect(e[2]).toBe(6);
+    expect(e[3]).toBe(9); // user stop = the real ETA
+  });
+  it('returns all null when bus is past the user or ETA unknown', () => {
+    expect(routeStopEtas(route, idx, 3, 1, 9).every((x) => x === null)).toBe(true);
+    expect(routeStopEtas(route, idx, 0, 3, null).every((x) => x === null)).toBe(true);
   });
 });
 
