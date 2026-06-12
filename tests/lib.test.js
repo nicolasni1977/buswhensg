@@ -9,6 +9,7 @@ import {
   isValidStopCode,
   pickRouteDirection,
   routeToLatLngs,
+  busProgress,
 } from '../public/lib.js';
 
 const STOPS = [
@@ -131,6 +132,20 @@ describe('pickRouteDirection', () => {
   });
   it('returns null for an unknown service', () => {
     expect(pickRouteDirection(routes, '99', 'X', 'Y')).toBeNull();
+  });
+});
+
+describe('busProgress', () => {
+  const idx = { A: { lat: 1.0, lng: 1.0 }, B: { lat: 1.1, lng: 1.1 }, C: { lat: 1.2, lng: 1.2 }, D: { lat: 1.3, lng: 1.3 } };
+  const route = ['A', 'B', 'C', 'D'];
+  it('counts stops from the bus to the user stop', () => {
+    expect(busProgress(1.1, 1.1, route, idx, 'D')).toEqual({ busIdx: 1, userIdx: 3, stopsAway: 2 });
+  });
+  it('is 0 when the bus is at the user stop', () => {
+    expect(busProgress(1.3, 1.3, route, idx, 'D').stopsAway).toBe(0);
+  });
+  it('returns null stopsAway when the user stop is not on the route', () => {
+    expect(busProgress(1.1, 1.1, route, idx, 'Z').stopsAway).toBeNull();
   });
 });
 

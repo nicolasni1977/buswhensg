@@ -13,7 +13,52 @@ import {
   isValidStopCode,
   pickRouteDirection,
   routeToLatLngs,
+  busProgress,
 } from './lib.js';
+
+// Local-flavour copy for the bus "journey card" (Singlish for EN; localised for zh/ms).
+const JOURNEY = {
+  en: {
+    crowd: { low: 'Got seats — shiok! 🪑', med: 'Standing only, but okay lah 🧍', high: 'Packed like sardine 🥫' },
+    away_now: "It's basically here — chiong! 🏃💨",
+    away_here: 'Your bus is at your stop now! 🎉',
+    quip: (n, min) =>
+      min != null && min <= 1 ? "Coming already — chope your spot! 🏃" :
+      n != null && n <= 2 ? 'Almost here — go wait at the stop 🚏' :
+      n != null && n <= 5 ? 'Got time — dabao kopi first? ☕' :
+      'Still a while more lah, relax and chill 😌',
+    night: 'Last-bus hours 🌙 — better catch it!',
+    stops_away: (n) => `${n} stop${n === 1 ? '' : 's'} away`,
+    arriving_in: (m) => (m <= 1 ? 'Arriving now' : `${m} min away`),
+    bus_here: '🚌 your bus is around here', you_here: '📍 your stop',
+  },
+  zh: {
+    crowd: { low: '有座位 🪑', med: '只能站着 🧍', high: '非常拥挤 🥵' },
+    away_now: '马上就到，快去等车！🏃', away_here: '巴士已到您的站！🎉',
+    quip: (n, min) =>
+      min != null && min <= 1 ? '快到了，准备上车！🏃' :
+      n != null && n <= 2 ? '快到了，到站台等吧 🚏' :
+      n != null && n <= 5 ? '还有点时间，喝杯咖啡？☕' :
+      '还要等一会，放松一下 😌',
+    night: '末班车时间 🌙 — 别错过！',
+    stops_away: (n) => `还有 ${n} 站`,
+    arriving_in: (m) => (m <= 1 ? '即将到达' : `还有 ${m} 分钟`),
+    bus_here: '🚌 巴士大约在这里', you_here: '📍 您的站',
+  },
+  ms: {
+    crowd: { low: 'Ada tempat duduk 🪑', med: 'Berdiri sahaja 🧍', high: 'Sangat sesak 🥵' },
+    away_now: 'Hampir sampai — cepat ke hentian! 🏃', away_here: 'Bas sudah di hentian anda! 🎉',
+    quip: (n, min) =>
+      min != null && min <= 1 ? 'Hampir sampai — bersedia! 🏃' :
+      n != null && n <= 2 ? 'Hampir sampai — tunggu di hentian 🚏' :
+      n != null && n <= 5 ? 'Masih ada masa — dabao kopi dulu? ☕' :
+      'Tunggu sekejap lagi, santai 😌',
+    night: 'Waktu bas terakhir 🌙 — jangan terlepas!',
+    stops_away: (n) => `${n} hentian lagi`,
+    arriving_in: (m) => (m <= 1 ? 'Tiba sekarang' : `${m} min lagi`),
+    bus_here: '🚌 bas anda di sekitar sini', you_here: '📍 hentian anda',
+  },
+};
 
 const AppState = {
   currentLang: 'en',
@@ -268,25 +313,58 @@ const App = {
     this.glideMarker(AppState.busMarker, [from.lat, from.lng], target);
   },
 
-  /** Show the tracked route's stops (id + name) in the semi-transparent panel. */
+  /** The "wow" bus journey card: where the bus is, how many stops away, crowd in Singlish, a local quip. */
   showRouteStops() {
     if (!AppState.trackedStops.length) return;
     const t = TRANSLATIONS[AppState.currentLang];
-    document.getElementById('route-sheet-title').textContent = `${t.route} · ${AppState.trackedService}`;
+    const j = JOURNEY[AppState.currentLang] || JOURNEY.en;
+    const svc = (AppState.lastServices || []).find((s) => s.service === AppState.trackedService);
+    const bus = svc && svc.arrivals[0];
+    const hasGPS = !!(bus && bus.lat);
+    const prog = hasGPS
+      ? busProgress(bus.lat, bus.lng, AppState.trackedStops, AppState.stopIndex, AppState.selectedStopCode)
+      : { busIdx: -1, userIdx: AppState.trackedStops.indexOf(AppState.selectedStopCode), stopsAway: null };
+    const min = bus ? bus.min : null;
+    const hr = new Date().getHours();
+    const isNight = hr >= 23 || hr < 5;
+
+    // Header (the wow): big stops-away + ETA + crowd in Singlish + a local quip.
+    const big = prog.stopsAway == null
+      ? (min != null ? j.arriving_in(min) : '—')
+      : prog.stopsAway <= 0 ? j.away_here : j.stops_away(prog.stopsAway);
+    const sub = (min != null && prog.stopsAway != null && prog.stopsAway > 0) ? `· ${j.arriving_in(min)}` : '';
+    const userName = (AppState.stopIndex[AppState.selectedStopCode] || {}).name || `Stop ${AppState.selectedStopCode}`;
+    const crowdLine = bus ? j.crowd[bus.crowding] : '';
+    const quip = (isNight ? j.night + ' ' : '') + j.quip(prog.stopsAway, min);
+
+    document.getElementById('route-sheet-title').innerHTML =
+      `<span class="rs-svc">🚌 ${esc(AppState.trackedService)}</span> <span class="rs-dest">${esc(svc ? svc.dest : '')}</span>`;
+    document.getElementById('route-journey').innerHTML = `
+      <div class="rs-big">${esc(big)} <span class="rs-sub">${esc(sub)}</span></div>
+      <div class="rs-toward">${esc(t.arrivals === 'Arrivals' ? 'to' : '→')} ${esc(userName)}</div>
+      ${crowdLine ? `<div class="rs-crowd crowding-${bus.crowding}">${esc(crowdLine)}</div>` : ''}
+      <div class="rs-quip">${esc(quip)}</div>`;
+
     const list = document.getElementById('route-sheet-list');
     list.innerHTML = AppState.trackedStops.map((code, i) => {
       const s = AppState.stopIndex[code];
-      const current = code === AppState.selectedStopCode ? ' current' : '';
-      return `<li class="${current.trim()}" data-code="${esc(code)}">
-        <span class="route-sheet__seq">${i + 1}</span>
+      const cls = [];
+      if (code === AppState.selectedStopCode) cls.push('current');
+      if (i === prog.busIdx) cls.push('atbus');
+      if (prog.busIdx >= 0 && prog.userIdx >= 0 && i > prog.busIdx && i < prog.userIdx) cls.push('between');
+      return `<li class="${cls.join(' ')}" data-code="${esc(code)}">
+        <span class="route-sheet__seq">${i === prog.busIdx ? '🚌' : i + 1}</span>
         <span class="route-sheet__code">${esc(code)}</span>
-        <span class="route-sheet__name">${esc(s ? s.name : 'Stop ' + code)}</span>
+        <span class="route-sheet__name">${esc(s ? s.name : 'Stop ' + code)}${code === AppState.selectedStopCode ? ' <em class="rs-tag">' + esc(j.you_here) + '</em>' : (i === prog.busIdx ? ' <em class="rs-tag">' + esc(j.bus_here) + '</em>' : '')}</span>
       </li>`;
     }).join('');
+
     const sheet = document.getElementById('route-sheet');
     sheet.hidden = false;
-    const cur = list.querySelector('li.current');
-    if (cur) cur.scrollIntoView({ block: 'center' });
+    const panel = sheet.querySelector('.route-sheet__panel');
+    if (!REDUCE_MOTION && panel) { panel.classList.remove('rs-pop'); void panel.offsetWidth; panel.classList.add('rs-pop'); }
+    const anchor = list.querySelector('li.atbus') || list.querySelector('li.current');
+    if (anchor) anchor.scrollIntoView({ block: 'center' });
   },
 
   hideRouteStops() { document.getElementById('route-sheet').hidden = true; },

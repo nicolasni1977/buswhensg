@@ -271,6 +271,33 @@ html.text-size-xlarge { font-size: 136%; }
 .route-sheet__code { font-family: var(--font-mono); font-size: 0.78rem; color: var(--color-primary); font-weight: 700; min-width: 46px; }
 .route-sheet__name { font-size: 0.9rem; color: var(--color-text); }
 
+/* --- Bus journey card (the "wow") --- */
+.rs-svc { font-family: var(--font-heading); font-weight: 800; }
+.rs-dest { color: var(--color-neutral-500); font-size: 0.78rem; font-weight: 600; }
+.route-journey {
+    flex: none; padding: 13px 16px 12px; border-bottom: 1px solid var(--color-border);
+    background: linear-gradient(180deg, var(--color-primary-light), transparent);
+}
+.rs-big { font-family: var(--font-heading); font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em;
+    color: var(--color-primary); line-height: 1.05; display: inline-block; }
+.rs-sub { font-size: 0.82rem; font-weight: 700; color: var(--color-neutral-700); letter-spacing: 0; }
+.rs-toward { font-size: 0.82rem; color: var(--color-neutral-700); margin-top: 2px; }
+.rs-crowd { display: inline-block; margin-top: 9px; padding: 4px 11px; border-radius: var(--radius-full);
+    font-size: 0.74rem; font-weight: 700; }
+.rs-quip { margin-top: 9px; font-size: 0.92rem; color: var(--color-text); }
+.rs-tag { font-style: normal; font-size: 0.64rem; font-weight: 800; color: var(--color-primary); margin-left: 6px; }
+
+.route-sheet__list li.atbus { background: var(--color-primary-light); }
+.route-sheet__list li.atbus .route-sheet__seq { font-size: 1rem; }
+.route-sheet__list li.between { background: rgba(230,0,0,.05); }
+.route-sheet__list li.current { outline: 2px solid var(--color-primary); }
+
+@keyframes rs-pop { from { transform: translateY(16px) scale(.97); opacity: .3; } to { transform: none; opacity: 1; } }
+@keyframes rs-bignum { 0% { transform: scale(.7); opacity: 0; } 60% { transform: scale(1.08); } 100% { transform: scale(1); opacity: 1; } }
+.route-sheet__panel.rs-pop { animation: rs-pop .28s ease-out; }
+.route-sheet__panel.rs-pop .rs-big { animation: rs-bignum .42s ease-out; }
+@media (prefers-reduced-motion: reduce) { .route-sheet__panel.rs-pop, .route-sheet__panel.rs-pop .rs-big { animation: none; } }
+
 .service-info { display: flex; flex-direction: column; gap: 2px; min-width: 56px; }
 .service-no { font-family: var(--font-heading); font-size: 1.45rem; font-weight: 700; color: var(--color-primary); }
 .service-dest { font-size: 0.78rem; color: var(--color-neutral-700); }

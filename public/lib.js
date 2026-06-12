@@ -86,6 +86,25 @@ export function pickRouteDirection(routes, service, selectedStop, destCode) {
   return routes[byDest || pool[0]];
 }
 
+/**
+ * Where the bus is along its route, relative to the user's stop.
+ * Finds the route stop nearest the bus's GPS, and how many stops until the user's stop.
+ * Returns { busIdx, userIdx, stopsAway } (stopsAway null if either can't be placed).
+ */
+export function busProgress(busLat, busLng, stopCodes, stopIndex, userStop) {
+  let busIdx = -1;
+  let min = Infinity;
+  (stopCodes || []).forEach((code, i) => {
+    const s = stopIndex[code];
+    if (!s) return;
+    const d = haversineKm(busLat, busLng, s.lat, s.lng);
+    if (d < min) { min = d; busIdx = i; }
+  });
+  const userIdx = (stopCodes || []).indexOf(userStop);
+  const stopsAway = busIdx >= 0 && userIdx >= 0 ? userIdx - busIdx : null;
+  return { busIdx, userIdx, stopsAway };
+}
+
 /** Map ordered stop codes to [lat,lng] pairs, skipping any not in the stop index. */
 export function routeToLatLngs(stopCodes, stopIndex) {
   const out = [];
