@@ -145,12 +145,15 @@ const App = {
     this.renderFavorites();
     this.updateLanguageUI();
     this.startTimers();
-    this.startTracking(); // continuously follow GPS to the nearest stop
+    // Deep link: /stop/<code> loads that stop directly; otherwise follow GPS.
+    const deep = location.pathname.match(/^\/stop\/(\d{5})$/);
+    if (deep) { AppState.autoFollow = false; this.updateArrivalResults(deep[1]); }
+    else { this.startTracking(); }
   },
 
   async loadStops() {
     try {
-      STOPS = await (await fetch('./stops.json')).json();
+      STOPS = await (await fetch('/stops.json')).json();
       AppState.stopIndex = Object.fromEntries(STOPS.map((s) => [s.code, s]));
     } catch (e) {
       console.error('Failed to load stops.json', e);
@@ -161,7 +164,7 @@ const App = {
   /** Lazy-load routes.json (only when the user first tracks a bus). */
   async ensureRoutes() {
     if (AppState.routes) return AppState.routes;
-    try { AppState.routes = await (await fetch('./routes.json')).json(); }
+    try { AppState.routes = await (await fetch('/routes.json')).json(); }
     catch (e) { console.error('Failed to load routes.json', e); AppState.routes = {}; }
     return AppState.routes;
   },
@@ -502,7 +505,10 @@ const App = {
     AppState.selectedStopCode = stopCode;
     const stop = findByCode(stopCode, STOPS);
 
-    if (!sameStop) this.clearTracking(); // switching stops drops any tracked bus
+    if (!sameStop) {
+      this.clearTracking(); // switching stops drops any tracked bus
+      history.replaceState(null, '', `/stop/${stopCode}`); // shareable, indexable URL
+    }
     document.getElementById('selected-stop').textContent = stop
       ? `${stop.name} · ${stop.road} · ${stop.code}`
       : `Stop ${stopCode}`;

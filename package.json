@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "wrangler pages dev public --port 8788",
     "test": "vitest run",
-    "fetch-stops": "node scripts/fetch-busstops.mjs"
+    "fetch-stops": "node scripts/fetch-busstops.mjs",
+    "build-sitemap": "node scripts/build-sitemap.mjs"
   },
   "devDependencies": {
     "vitest": "^3",
