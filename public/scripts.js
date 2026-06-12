@@ -46,7 +46,7 @@ const REFRESH_INTERVAL_MS = 25000;
 const BUS_ICON = {
   className: 'bus-pin',
   html: '<svg viewBox="0 0 24 24" aria-label="bus"><path d="M4 16c0 .88.39 1.67 1 2.22V20a1 1 0 001 1h1a1 1 0 001-1v-1h8v1a1 1 0 001 1h1a1 1 0 001-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm9 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM6 11V6h12v5H6z"/></svg>',
-  iconSize: [38, 38], iconAnchor: [19, 19], popupAnchor: [0, -22],
+  iconSize: [20, 20], iconAnchor: [10, 10], popupAnchor: [0, -12],
 };
 const STOP_ICON = {
   className: 'stop-dot', html: '<span></span>', iconSize: [18, 18], iconAnchor: [9, 9],
