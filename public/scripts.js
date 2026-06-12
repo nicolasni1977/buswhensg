@@ -33,6 +33,7 @@ const AppState = {
   routes: null,       // lazy-loaded routes.json (service:dir -> ordered stop codes)
   stopIndex: {},      // code -> {lat,lng,name,road}
   trackedService: null,
+  trackedStops: [],   // ordered stop codes of the tracked route (for the stop-list panel)
   routeLayer: null,
   busMarker: null,
   busAnim: null,
@@ -59,7 +60,7 @@ const TRANSLATIONS = {
   en: {
     skip_to_content: 'Skip to Main Content', quick_favorites: 'Quick Access Favorites',
     search_label: 'Search by Stop Code or Name', search_placeholder: 'Enter 5-digit stop code or name…',
-    search_btn: 'Search', near_me: 'Near Me', arrivals: 'Arrivals', updated_ago: 'Updated',
+    search_btn: 'Search', near_me: 'Near Me', arrivals: 'Arrivals', route: 'Route', updated_ago: 'Updated',
     select_stop_prompt: 'Tap a favourite, search a stop code, or use “Near Me”.',
     locating: 'Finding your nearest bus stop…',
     loading: 'Fetching live arrivals…', no_data: 'No buses running for this stop right now.',
@@ -71,7 +72,7 @@ const TRANSLATIONS = {
   zh: {
     skip_to_content: '跳转到主要内容', quick_favorites: '快速访问收藏',
     search_label: '通过站点代码或名称搜索', search_placeholder: '输入5位站点代码或名称…',
-    search_btn: '搜索', near_me: '在我附近', arrivals: '巴士到达', updated_ago: '更新于',
+    search_btn: '搜索', near_me: '在我附近', arrivals: '巴士到达', route: '路线', updated_ago: '更新于',
     select_stop_prompt: '点按收藏、搜索站点代码，或使用“在我附近”。',
     locating: '正在查找最近的巴士站…',
     loading: '正在获取实时数据…', no_data: '该站点目前没有巴士。',
@@ -83,7 +84,7 @@ const TRANSLATIONS = {
   ms: {
     skip_to_content: 'Langkau ke Kandungan Utama', quick_favorites: 'Kegemaran Akses Pantas',
     search_label: 'Cari mengikut Kod atau Nama Hentian', search_placeholder: 'Masukkan kod 5-digit atau nama…',
-    search_btn: 'Cari', near_me: 'Berdekatan Saya', arrivals: 'Ketibaan', updated_ago: 'Dikemaskini',
+    search_btn: 'Cari', near_me: 'Berdekatan Saya', arrivals: 'Ketibaan', route: 'Laluan', updated_ago: 'Dikemaskini',
     select_stop_prompt: 'Tekan kegemaran, cari kod hentian, atau guna “Berdekatan Saya”.',
     locating: 'Mencari hentian bas terdekat…',
     loading: 'Mengambil data masa nyata…', no_data: 'Tiada bas untuk hentian ini sekarang.',
@@ -233,6 +234,7 @@ const App = {
 
     this.clearTracking();
     AppState.trackedService = service;
+    AppState.trackedStops = stopCodes || []; // for the tap-the-bus stop list
     this.startRefreshTimer(); // poll faster while tracking
     AppState.routeLayer = L.layerGroup().addTo(AppState.map);
     const line = L.polyline(latlngs, { color: '#2563eb', weight: 5, opacity: 0.85 }).addTo(AppState.routeLayer);
@@ -254,14 +256,37 @@ const App = {
   placeBusMarker(bus, service, dest) {
     const target = [bus.lat, bus.lng];
     if (!AppState.busMarker) { // first placement — no glide
-      AppState.busMarker = L.marker(target, { icon: L.divIcon(BUS_ICON), zIndexOffset: 1000 })
+      AppState.busMarker = L.marker(target, { icon: L.divIcon(BUS_ICON), zIndexOffset: 1000, title: `Bus ${service}` })
         .addTo(AppState.routeLayer)
-        .bindPopup(`<b>Bus ${esc(service)}</b><br>${esc(dest)}`);
+        .on('click', () => this.showRouteStops()); // tap the bus → stop-by-stop list
       return;
     }
     const from = AppState.busMarker.getLatLng();
     this.glideMarker(AppState.busMarker, [from.lat, from.lng], target);
   },
+
+  /** Show the tracked route's stops (id + name) in the semi-transparent panel. */
+  showRouteStops() {
+    if (!AppState.trackedStops.length) return;
+    const t = TRANSLATIONS[AppState.currentLang];
+    document.getElementById('route-sheet-title').textContent = `${t.route} · ${AppState.trackedService}`;
+    const list = document.getElementById('route-sheet-list');
+    list.innerHTML = AppState.trackedStops.map((code, i) => {
+      const s = AppState.stopIndex[code];
+      const current = code === AppState.selectedStopCode ? ' current' : '';
+      return `<li class="${current.trim()}" data-code="${esc(code)}">
+        <span class="route-sheet__seq">${i + 1}</span>
+        <span class="route-sheet__code">${esc(code)}</span>
+        <span class="route-sheet__name">${esc(s ? s.name : 'Stop ' + code)}</span>
+      </li>`;
+    }).join('');
+    const sheet = document.getElementById('route-sheet');
+    sheet.hidden = false;
+    const cur = list.querySelector('li.current');
+    if (cur) cur.scrollIntoView({ block: 'center' });
+  },
+
+  hideRouteStops() { document.getElementById('route-sheet').hidden = true; },
 
   /** Smoothly glide the pin from `from` to `to` across (just under) one poll interval. */
   glideMarker(marker, from, to, duration = TRACK_INTERVAL_MS - 1000) {
@@ -302,7 +327,9 @@ const App = {
     AppState.routeLayer = null;
     AppState.busMarker = null;
     AppState.trackedService = null;
+    AppState.trackedStops = [];
     this.setMapNotice(null);
+    this.hideRouteStops();
     this.startRefreshTimer(); // back to the normal (slower) cadence
   },
 
@@ -361,6 +388,16 @@ const App = {
       const card = e.target.closest('.arrival-card');
       if (card && card.dataset.service) this.trackBus(card.dataset.service);
     });
+
+    // Route stop-list panel: close (✕ / backdrop / Esc) and tap a stop to view it.
+    const sheet = document.getElementById('route-sheet');
+    document.getElementById('route-sheet-close').addEventListener('click', () => this.hideRouteStops());
+    sheet.addEventListener('click', (e) => { if (e.target === sheet) this.hideRouteStops(); });
+    document.getElementById('route-sheet-list').addEventListener('click', (e) => {
+      const li = e.target.closest('li[data-code]');
+      if (li) { AppState.autoFollow = false; this.hideRouteStops(); this.updateArrivalResults(li.dataset.code); }
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.hideRouteStops(); });
 
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') {

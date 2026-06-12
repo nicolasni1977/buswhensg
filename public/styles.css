@@ -80,6 +80,7 @@ html.text-size-xlarge { font-size: 136%; }
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    position: relative;            /* contains the route overlay */
     background: var(--color-background);
     border-inline: 1px solid var(--color-border);
 }
@@ -235,6 +236,40 @@ html.text-size-xlarge { font-size: 136%; }
 .stop-dot { background: none; border: none; }
 .stop-dot span { display: block; width: 14px; height: 14px; border-radius: 50%;
     background: var(--color-primary); border: 3px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
+
+/* Route stop list — semi-transparent panel opened by tapping the bus icon */
+.route-sheet {
+    position: absolute; inset: 0; z-index: 1200;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(15,23,42,.35); padding: 18px;
+}
+.route-sheet[hidden] { display: none; }
+.route-sheet__panel {
+    width: 100%; max-width: 420px; max-height: 80%;
+    display: flex; flex-direction: column;
+    background: rgba(255,255,255,.86);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md); overflow: hidden;
+}
+.theme-dark .route-sheet__panel { background: rgba(29,53,87,.88); }
+.route-sheet__head {
+    flex: none; display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 14px; border-bottom: 1px solid var(--color-border);
+}
+.route-sheet__title { font-family: var(--font-heading); font-weight: 800; font-size: 1rem; }
+.route-sheet__close { border: none; background: none; font-size: 1.6rem; line-height: 1;
+    cursor: pointer; color: var(--color-neutral-700); width: 34px; height: 34px; }
+.route-sheet__list { list-style: none; margin: 0; padding: 6px; overflow-y: auto; flex: 1; }
+.route-sheet__list li {
+    display: flex; align-items: baseline; gap: 10px; padding: 9px 10px;
+    border-radius: var(--radius-md); cursor: pointer;
+}
+.route-sheet__list li:hover { background: rgba(0,0,0,.05); }
+.route-sheet__list li.current { background: var(--color-primary-light); }
+.route-sheet__seq { font-family: var(--font-mono); font-size: 0.68rem; color: var(--color-neutral-500); min-width: 22px; text-align: right; }
+.route-sheet__code { font-family: var(--font-mono); font-size: 0.78rem; color: var(--color-primary); font-weight: 700; min-width: 46px; }
+.route-sheet__name { font-size: 0.9rem; color: var(--color-text); }
 
 .service-info { display: flex; flex-direction: column; gap: 2px; min-width: 56px; }
 .service-no { font-family: var(--font-heading); font-size: 1.45rem; font-weight: 700; color: var(--color-primary); }

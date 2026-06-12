@@ -131,6 +131,17 @@
                 </div>
             </section>
         </main>
+
+        <!-- Route stop list (opens when the bus icon is tapped) -->
+        <div id="route-sheet" class="route-sheet" hidden>
+            <div class="route-sheet__panel" role="dialog" aria-label="Bus route stops">
+                <div class="route-sheet__head">
+                    <span id="route-sheet-title" class="route-sheet__title">Route</span>
+                    <button id="route-sheet-close" class="route-sheet__close" aria-label="Close">&times;</button>
+                </div>
+                <ol id="route-sheet-list" class="route-sheet__list"></ol>
+            </div>
+        </div>
     </div>
 
     <script type="module" src="scripts.js"></script>
